@@ -410,36 +410,60 @@ func (iter *Iter) Columns() []ColumnInfo {
 // end of the result set was reached or if an error occurred. Close should
 // be called afterwards to retrieve any potential errors.
 func (iter *Iter) Scan(dest ...interface{}) bool {
-	if iter.err != nil {
-		return false
-	}
-	if iter.pos >= len(iter.rows) {
-		if iter.next != nil {
-			*iter = *iter.next.fetch()
-			return iter.Scan(dest...)
-		}
-		return false
-	}
-	if iter.next != nil && iter.pos == iter.next.pos {
-		go iter.next.fetch()
-	}
 	if len(dest) != len(iter.columns) {
 		iter.err = errors.New("count mismatch")
 		return false
 	}
-	for i := 0; i < len(iter.columns); i++ {
-		if dest[i] == nil {
-			continue
+
+	if columns, values, err := iter.ScanRaw(); err == nil {
+		for i := 0; i < len(iter.columns); i++ {	
+			if dest[i] == nil {
+				continue
+			}
+			
+			err := Unmarshal(columns[i].TypeInfo, values[i], dest[i])
+
+			if err != nil {
+				iter.err = err
+				return false
+			}
 		}
-		err := Unmarshal(iter.columns[i].TypeInfo, iter.rows[iter.pos][i], dest[i])
-		if err != nil {
-			iter.err = err
-			return false
+
+		return true
+	}else{
+		iter.err = err
+		return false		
+	}
+}
+
+
+func (iter *Iter) ScanRaw() ([]ColumnInfo, [][]byte, error) {
+	if iter.err != nil {
+		return nil, nil, iter.err
+	}
+	if iter.pos >= len(iter.rows) {
+		if iter.next != nil {
+			*iter = *iter.next.fetch()
+			return iter.ScanRaw()
 		}
+		return nil, nil, errors.New("position overrun")
+	}
+
+	columns := make([]ColumnInfo, 0)
+	values := make([][]byte, 0)
+
+	if iter.next != nil && iter.pos == iter.next.pos {
+		go iter.next.fetch()
+	}
+
+	for i := 0; i < len(iter.columns); i++ {		
+		columns = append(columns, iter.columns[i])
+		values = append(values, iter.rows[iter.pos][i])
 	}
 	iter.pos++
-	return true
+	return columns, values, nil
 }
+
 
 // Close closes the iterator and returns any errors that happened during
 // the query or the iteration.
