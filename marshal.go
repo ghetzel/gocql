@@ -252,6 +252,10 @@ func marshalInt(info *TypeInfo, value interface{}) ([]byte, error) {
 		return encInt(int32(v)), nil
 	case uint8:
 		return encInt(int32(v)), nil
+	case float32:
+		return encInt(int32(v)), nil
+	case float64:
+		return encInt(int32(v)), nil
 	case string:
 		i, err := strconv.ParseInt(value.(string), 10, 32)
 		if err != nil {
@@ -320,6 +324,10 @@ func marshalBigInt(info *TypeInfo, value interface{}) ([]byte, error) {
 		return encBigInt(int64(v)), nil
 	case big.Int:
 		return encBigInt2C(&v), nil
+	case float32:
+		return encBigInt(int64(v)), nil
+	case float64:
+		return encBigInt(int64(v)), nil
 	case string:
 		i, err := strconv.ParseInt(value.(string), 10, 64)
 		if err != nil {
