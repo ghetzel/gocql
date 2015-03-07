@@ -772,6 +772,12 @@ func marshalTimestamp(info *TypeInfo, value interface{}) ([]byte, error) {
 		return v.MarshalCQL(info)
 	case int64:
 		return encBigInt(v), nil
+	case string:
+		if tm, err := time.Parse(time.RFC3339, value.(string)); err == nil {
+			x := tm.UnixNano() / int64(1000000)
+			return encBigInt(x), nil
+		}
+
 	case time.Time:
 		x := v.UnixNano() / int64(1000000)
 		return encBigInt(x), nil
