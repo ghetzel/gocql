@@ -12,8 +12,10 @@ import (
 	"math/big"
 	"net"
 	"reflect"
+	"strings"
 	"strconv"
 	"time"
+	"os"
 
 	"speter.net/go/exp/math/dec/inf"
 )
@@ -52,37 +54,50 @@ func Marshal(info *TypeInfo, value interface{}) ([]byte, error) {
 			return Marshal(info, valueRef.Elem().Interface())
 		}
 	}
+	
+	var returnValue []byte
+	var err error
 
 	switch info.Type {
 	case TypeVarchar, TypeAscii, TypeBlob:
-		return marshalVarchar(info, value)
+		returnValue, err = marshalVarchar(info, value)
 	case TypeBoolean:
-		return marshalBool(info, value)
+		returnValue, err = marshalBool(info, value)
 	case TypeInt:
-		return marshalInt(info, value)
+		returnValue, err = marshalInt(info, value)
 	case TypeBigInt, TypeCounter:
-		return marshalBigInt(info, value)
+		returnValue, err = marshalBigInt(info, value)
 	case TypeFloat:
-		return marshalFloat(info, value)
+		returnValue, err = marshalFloat(info, value)
 	case TypeDouble:
-		return marshalDouble(info, value)
+		returnValue, err = marshalDouble(info, value)
 	case TypeDecimal:
-		return marshalDecimal(info, value)
+		returnValue, err = marshalDecimal(info, value)
 	case TypeTimestamp:
-		return marshalTimestamp(info, value)
+		returnValue, err = marshalTimestamp(info, value)
 	case TypeList, TypeSet:
-		return marshalList(info, value)
+		returnValue, err = marshalList(info, value)
 	case TypeMap:
-		return marshalMap(info, value)
+		returnValue, err = marshalMap(info, value)
 	case TypeUUID, TypeTimeUUID:
-		return marshalUUID(info, value)
+		returnValue, err = marshalUUID(info, value)
 	case TypeVarint:
-		return marshalVarint(info, value)
+		returnValue, err = marshalVarint(info, value)
 	case TypeInet:
-		return marshalInet(info, value)
+		returnValue, err = marshalInet(info, value)
+	default:
+		returnValue = nil
+		err = fmt.Errorf("can not marshal %T into %s", value, info)
 	}
-	// TODO(tux21b): add the remaining types
-	return nil, fmt.Errorf("can not marshal %T into %s", value, info)
+
+//	ghetzel: erroneous marshal errors will not fail the query, just NULL the field
+	if err != nil {
+	//	such sorry
+		fmt.Fprintf(os.Stderr, "WARN: Error during query execution: %s\n", err)
+		return nil, nil
+	}else{
+		return returnValue, nil
+	}
 }
 
 // Unmarshal parses the CQL encoded data based on the info parameter that
@@ -161,7 +176,32 @@ func marshalVarchar(info *TypeInfo, value interface{}) ([]byte, error) {
 		return []byte(v), nil
 	case []byte:
 		return v, nil
+	case float32:
+		return []byte( strconv.FormatFloat(float64(value.(float32)), 'f', -1, 32) ), nil
+	case float64:
+		return []byte( strconv.FormatFloat(value.(float64), 'f', -1, 64) ), nil
+	case int:
+		return []byte( strconv.FormatInt(int64(value.(int)), 10) ), nil
+	case int8:
+		return []byte( strconv.FormatInt(int64(value.(int8)), 10) ), nil
+	case int16:
+		return []byte( strconv.FormatInt(int64(value.(int16)), 10) ), nil
+	case int32:
+		return []byte( strconv.FormatInt(int64(value.(int32)), 10) ), nil
+	case int64:
+		return []byte( strconv.FormatInt(value.(int64), 10) ), nil
+	case uint8:
+		return []byte( strconv.FormatUint(uint64(value.(uint8)), 10) ), nil
+	case uint16:
+		return []byte( strconv.FormatUint(uint64(value.(uint16)), 10) ), nil
+	case uint32:
+		return []byte( strconv.FormatUint(uint64(value.(uint32)), 10) ), nil
+	case uint64:
+		return []byte( strconv.FormatUint(value.(uint64), 10) ), nil
+	case bool:
+		return []byte( strconv.FormatBool(value.(bool)) ), nil
 	}
+
 	rv := reflect.ValueOf(value)
 	t := rv.Type()
 	k := t.Kind()
@@ -587,6 +627,12 @@ func marshalBool(info *TypeInfo, value interface{}) ([]byte, error) {
 		return v.MarshalCQL(info)
 	case bool:
 		return encBool(v), nil
+	case string:
+		if strings.ToLower(value.(string)) == "true" {
+			return encBool(true), nil
+		}else if strings.ToLower(value.(string)) == "false" {
+			return encBool(false), nil
+		}
 	}
 	rv := reflect.ValueOf(value)
 	switch rv.Type().Kind() {
@@ -637,6 +683,10 @@ func marshalFloat(info *TypeInfo, value interface{}) ([]byte, error) {
 		return v.MarshalCQL(info)
 	case float32:
 		return encInt(int32(math.Float32bits(v))), nil
+	case string:
+		if cV, err := strconv.ParseFloat(value.(string), 32); err == nil {
+			return encBigInt(int64(math.Float32bits(float32(cV)))), nil
+		}
 	}
 	rv := reflect.ValueOf(value)
 	switch rv.Type().Kind() {
@@ -673,6 +723,10 @@ func marshalDouble(info *TypeInfo, value interface{}) ([]byte, error) {
 		return v.MarshalCQL(info)
 	case float64:
 		return encBigInt(int64(math.Float64bits(v))), nil
+	case string:
+		if cV, err := strconv.ParseFloat(value.(string), 64); err == nil {
+			return encBigInt(int64(math.Float64bits(cV))), nil
+		}
 	}
 	rv := reflect.ValueOf(value)
 	switch rv.Type().Kind() {
